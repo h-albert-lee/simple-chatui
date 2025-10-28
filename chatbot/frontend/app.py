@@ -14,6 +14,12 @@ load_dotenv()
 st.set_page_config(page_title="Simple ChatUI", page_icon="💬", layout="wide")
 
 session_manager.initialize_session()
+
+if not session_manager.is_authenticated():
+    ui_component.render_sidebar()
+    ui_component.render_auth_forms()
+    st.stop()
+
 ui_component.render_sidebar()
 
 current_chat = session_manager.get_current_chat()
@@ -42,13 +48,14 @@ if prompt:
     session_manager.update_title_if_needed(prompt)
 
     model_name = session_manager.get_selected_model()
+    token = session_manager.get_auth_token()
 
     with st.chat_message("assistant"):
         collected_chunks: List[str] = []
         response_container = st.empty()
         try:
             for chunk in api_client.stream_chat_completion(
-                current_chat["messages"], model=model_name
+                current_chat["messages"], model=model_name, token=token or ""
             ):
                 collected_chunks.append(chunk)
                 response_container.markdown("".join(collected_chunks))
