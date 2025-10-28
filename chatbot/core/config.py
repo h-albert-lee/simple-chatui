@@ -1,27 +1,63 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from functools import lru_cache
+from pathlib import Path
 from typing import List
 
+from pydantic import AnyHttpUrl, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
 class Settings(BaseSettings):
-    # .env 파일을 읽도록 설정
-    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', extra='ignore')
+    """Central application configuration."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     # Backend
     BACKEND_HOST: str = "0.0.0.0"
-    BACKEND_PORT: int = 8888
+    BACKEND_PORT: int = 8000
     LOG_LEVEL: str = "INFO"
 
-    # vLLM
-    VLLM_API_URL: str
+    # URL exposed to the Streamlit frontend for chat completions
+    BACKEND_API_URL: AnyHttpUrl = "http://localhost:8000/api/v1/chat/completions"
 
-    # Frontend
-    FRONTEND_BACKEND_URL: str
+    # Upstream OpenAI-compatible API
+    UPSTREAM_API_BASE: AnyHttpUrl
+    UPSTREAM_API_KEY: str = ""
+    DEFAULT_MODEL: str = "gpt-3.5-turbo"
+
+    # Persistence
+    DATABASE_URL: str = "sqlite:///chat_history.db"
 
     # CORS
-    CORS_ORIGINS_STR: str = "http://localhost:8501"
+    CORS_ORIGINS: List[str] = ["http://localhost:8501"]
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def split_cors_origins(cls, value: object) -> List[str]:
+        if isinstance(value, str):
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value  # type: ignore[return-value]
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def validate_database_url(cls, value: str) -> str:
+        if not value.startswith("sqlite:///"):
+            raise ValueError("Only sqlite:/// URLs are supported for DATABASE_URL")
+        return value
 
     @property
-    def CORS_ORIGINS(self) -> List[str]:
-        return [origin.strip() for origin in self.CORS_ORIGINS_STR.split(',')]
+    def database_path(self) -> Path:
+        return Path(self.DATABASE_URL.replace("sqlite:///", "")).expanduser().resolve()
 
-# 설정 객체 인스턴스화 (싱글톤처럼 사용)
-settings = Settings()
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    """Return a cached Settings instance."""
+
+    return Settings()
+
+
+settings = get_settings()

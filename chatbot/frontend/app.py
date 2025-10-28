@@ -1,51 +1,62 @@
+"""Streamlit application entry point."""
+
+from __future__ import annotations
+
+from typing import List
+
 import streamlit as st
-from my_chatbot.frontend import session_manager, ui_components, api_client
 from dotenv import load_dotenv
 
-# .env 파일에서 환경 변수를 로드합니다.
-# 이는 streamlit run 명령이 실행될 때 .env를 자동으로 읽지 못할 경우를 대비합니다.
+from chatbot.frontend import api_client, session_manager, ui_component
+
 load_dotenv()
 
-# 페이지 설정은 반드시 스크립트 최상단에 위치해야 합니다.
-st.set_page_config(page_title="My Gemini Clone", page_icon="♊", layout="wide")
+st.set_page_config(page_title="Simple ChatUI", page_icon="💬", layout="wide")
 
-# 1. 세션 초기화
 session_manager.initialize_session()
+ui_component.render_sidebar()
 
-# 2. 사이드바 UI 렌더링
-ui_components.render_sidebar()
+current_chat = session_manager.get_current_chat()
 
-# 3. 메인 화면 로직
-current_chat = session_manager.get_current_chat_data()
-
-if not current_chat:
-    st.title("안녕하세요!")
-    st.write("무엇을 도와드릴까요? 사이드바에서 '새 채팅'을 시작하세요.")
+if not current_chat or not current_chat.get("messages"):
+    st.title("간단한 ChatGPT 스타일 인터페이스")
+    st.write(
+        "좌측 사이드바에서 새 대화를 시작하고, 모델을 선택한 뒤 메시지를 입력해보세요."
+    )
 else:
-    # 채팅 기록 렌더링
-    ui_components.render_chat_history(current_chat)
+    ui_component.render_chat_history(current_chat)
 
-    # 사용자 입력 처리
-    if prompt := st.chat_input("메시지를 입력하세요..."):
-        # 사용자 메시지 저장 및 즉시 표시
-        current_chat["messages"].append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+prompt = st.chat_input("메시지를 입력하세요…")
 
-        # 첫 사용자 메시지인 경우, 제목을 생성하고 UI를 새로고침하여 반영
-        if len(current_chat["messages"]) == 1:
-            title = prompt[:25] + "..." if len(prompt) > 25 else prompt
-            current_chat["title"] = title
-            st.rerun()
+if prompt:
+    if not current_chat:
+        session_manager.create_new_chat()
+        current_chat = session_manager.get_current_chat()
 
-        # 어시스턴트 응답 처리
-        with st.chat_message("assistant"):
-            try:
-                with st.spinner("AI가 생각 중입니다..."):
-                    response_stream = api_client.stream_chat_to_backend(current_chat["messages"])
-                    # 스트리밍 응답을 실시간으로 화면에 렌더링
-                    full_response = st.write_stream(response_stream.iter_content())
-                # 전체 응답을 대화 기록에 저장
-                current_chat["messages"].append({"role": "assistant", "content": full_response})
-            except Exception as e:
-                st.error(f"오류가 발생했습니다: {e}")
+    session_manager.append_message("user", prompt)
+    current_chat = session_manager.get_current_chat()
+
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    session_manager.update_title_if_needed(prompt)
+
+    model_name = session_manager.get_selected_model()
+
+    with st.chat_message("assistant"):
+        collected_chunks: List[str] = []
+        response_container = st.empty()
+        try:
+            for chunk in api_client.stream_chat_completion(
+                current_chat["messages"], model=model_name
+            ):
+                collected_chunks.append(chunk)
+                response_container.markdown("".join(collected_chunks))
+        except Exception as exc:  # broad to display feedback in UI
+            st.error(f"응답을 가져오는 중 오류가 발생했습니다: {exc}")
+        else:
+            full_response = "".join(collected_chunks)
+            if full_response:
+                session_manager.append_message("assistant", full_response)
+
+    st.experimental_rerun()

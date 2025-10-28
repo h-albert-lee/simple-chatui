@@ -1,13 +1,51 @@
-import requests
-from my_chatbot.core.config import settings
+"""Client utilities for talking to the FastAPI backend."""
 
-def stream_chat_to_backend(messages: list):
-    """
-    Sends chat messages to the backend and streams the response.
-    Raises an exception if the request fails.
-    """
-    payload = {"messages": messages}
-    # `settings` 객체에서 백엔드 URL을 직접 사용
-    response = requests.post(settings.FRONTEND_BACKEND_URL, json=payload, stream=True, timeout=180)
-    response.raise_for_status() # HTTP 오류 발생 시 예외 발생
-    return response
+from __future__ import annotations
+
+import json
+from typing import Generator, Iterable
+
+import requests
+
+from chatbot.core.config import settings
+
+_TIMEOUT = (10, 300)
+
+
+def stream_chat_completion(messages: Iterable[dict[str, str]], model: str) -> Generator[str, None, None]:
+    """Stream assistant responses from the backend."""
+
+    payload = {
+        "messages": list(messages),
+        "model": model,
+        "stream": True,
+    }
+
+    with requests.post(
+        settings.BACKEND_API_URL,
+        json=payload,
+        stream=True,
+        timeout=_TIMEOUT,
+    ) as response:
+        response.raise_for_status()
+        for line in response.iter_lines(decode_unicode=True):
+            if not line:
+                continue
+            if not line.startswith("data:"):
+                continue
+            data_str = line[len("data:") :].strip()
+            if data_str == "[DONE]":
+                break
+            try:
+                data = json.loads(data_str)
+            except json.JSONDecodeError:
+                # upstream might send plain text chunks; pass through
+                yield data_str
+                continue
+            delta = (
+                data.get("choices", [{}])[0]
+                .get("delta", {})
+                .get("content")
+            )
+            if delta:
+                yield delta
