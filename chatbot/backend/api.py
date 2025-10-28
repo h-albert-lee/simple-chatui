@@ -4,19 +4,49 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import AsyncGenerator, Dict
+from typing import Annotated, AsyncGenerator, Dict, Optional
 
 import httpx
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from fastapi.responses import StreamingResponse
 
+from chatbot.core import storage
 from chatbot.core.config import settings
 
-from .models import ChatCompletionRequest, ErrorResponse
+from .models import AuthRequest, AuthResponse, ChatCompletionRequest, ErrorResponse
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+auth_router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _extract_token(authorization: Optional[str]) -> str:
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authorization header missing",
+        )
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Authorization header",
+        )
+    return token.strip()
+
+
+def get_current_user(
+    authorization: Annotated[Optional[str], Header(alias="Authorization")] = None,
+) -> Dict[str, str]:
+    token = _extract_token(authorization)
+    user = storage.get_user_by_token(token)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+        )
+    return user
 
 
 async def _stream_upstream(payload: Dict[str, object]) -> AsyncGenerator[bytes, None]:
@@ -46,7 +76,10 @@ async def _stream_upstream(payload: Dict[str, object]) -> AsyncGenerator[bytes, 
 
 
 @router.post("/chat/completions", response_class=StreamingResponse)
-async def chat_completions(request: ChatCompletionRequest) -> StreamingResponse:
+async def chat_completions(
+    request: ChatCompletionRequest,
+    current_user: Dict[str, str] = Depends(get_current_user),
+) -> StreamingResponse:
     """Proxy chat completion requests to the upstream API with streaming support."""
 
     if not request.messages:
@@ -65,3 +98,42 @@ async def chat_completions(request: ChatCompletionRequest) -> StreamingResponse:
         _stream_upstream(payload),
         media_type="text/event-stream",
     )
+
+
+@auth_router.post("/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
+def signup(payload: AuthRequest) -> AuthResponse:
+    try:
+        user_id = storage.create_user(payload.username, payload.password)
+    except storage.UserAlreadyExistsError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    token = storage.issue_token(user_id)
+    return AuthResponse(user_id=user_id, username=payload.username, token=token)
+
+
+@auth_router.post("/login", response_model=AuthResponse)
+def login(payload: AuthRequest) -> AuthResponse:
+    user = storage.authenticate_user(payload.username, payload.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+        )
+
+    token = storage.issue_token(user["id"])
+    return AuthResponse(user_id=user["id"], username=user["username"], token=token)
+
+
+@auth_router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(
+    authorization: Annotated[Optional[str], Header(alias="Authorization")] = None,
+) -> Response:
+    token = _extract_token(authorization)
+    storage.revoke_token(token)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+router.include_router(auth_router)

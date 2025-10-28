@@ -23,12 +23,21 @@ def reload_modules(monkeypatch, tmp_path):
     reload(main)
     sys.modules["chatbot.backend.api"] = api
     sys.modules["chatbot.backend.main"] = main
+
+    from chatbot.core import storage
+
+    storage.initialize_database()
     yield
 
 
 @pytest.mark.asyncio
 async def test_chat_completions_stream():
     from chatbot.backend.main import app
+
+    from chatbot.core import storage
+
+    user_id = storage.create_user("tester", "secret")
+    token = storage.issue_token(user_id)
 
     with respx.mock(assert_all_called=True) as respx_mock:
         route = respx_mock.post("http://upstream.test/v1/chat/completions").mock(
@@ -47,6 +56,7 @@ async def test_chat_completions_stream():
             response = await client.post(
                 "/api/v1/chat/completions",
                 json={"messages": [{"role": "user", "content": "Hi"}]},
+                headers={"Authorization": f"Bearer {token}"},
             )
             assert response.status_code == 200
             body = "".join([chunk async for chunk in response.aiter_text()])

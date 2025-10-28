@@ -22,11 +22,29 @@ def reload_modules(monkeypatch, tmp_path):
     reload(config)
     reload(api)
     reload(main)
+
+    from chatbot.core import storage
+
+    storage.initialize_database()
     yield
 
 
+@pytest.fixture
+def auth_headers():
+    from chatbot.core import storage
+
+    try:
+        user_id = storage.create_user("tester", "secret")
+    except storage.UserAlreadyExistsError:
+        user = storage.authenticate_user("tester", "secret")
+        assert user is not None
+        user_id = user["id"]
+    token = storage.issue_token(user_id)
+    return {"Authorization": f"Bearer {token}"}
+
+
 @pytest.mark.asyncio
-async def test_chat_completions_with_custom_model():
+async def test_chat_completions_with_custom_model(auth_headers):
     """Test chat completions with custom model parameter."""
     from chatbot.backend.main import app
     
@@ -47,6 +65,7 @@ async def test_chat_completions_with_custom_model():
                     "messages": [{"role": "user", "content": "Hi"}],
                     "model": "custom-model-name"
                 },
+                headers=auth_headers,
             )
             
             assert response.status_code == 200
@@ -60,7 +79,7 @@ async def test_chat_completions_with_custom_model():
 
 
 @pytest.mark.asyncio
-async def test_chat_completions_with_temperature():
+async def test_chat_completions_with_temperature(auth_headers):
     """Test chat completions with temperature parameter."""
     from chatbot.backend.main import app
     
@@ -82,6 +101,7 @@ async def test_chat_completions_with_temperature():
                     "temperature": 0.7,
                     "top_p": 0.9
                 },
+                headers=auth_headers,
             )
             
             assert response.status_code == 200
@@ -94,7 +114,7 @@ async def test_chat_completions_with_temperature():
 
 
 @pytest.mark.asyncio
-async def test_chat_completions_empty_messages():
+async def test_chat_completions_empty_messages(auth_headers):
     """Test chat completions with empty messages list."""
     from chatbot.backend.main import app
     
@@ -103,6 +123,7 @@ async def test_chat_completions_empty_messages():
         response = await client.post(
             "/api/v1/chat/completions",
             json={"messages": []},
+            headers=auth_headers,
         )
         
         assert response.status_code == 400
@@ -111,7 +132,7 @@ async def test_chat_completions_empty_messages():
 
 
 @pytest.mark.asyncio
-async def test_chat_completions_upstream_error():
+async def test_chat_completions_upstream_error(auth_headers):
     """Test handling of upstream API errors."""
     from chatbot.backend.main import app
     
@@ -128,6 +149,7 @@ async def test_chat_completions_upstream_error():
             response = await client.post(
                 "/api/v1/chat/completions",
                 json={"messages": [{"role": "user", "content": "Hi"}]},
+                headers=auth_headers,
             )
             
             assert response.status_code == 200  # Still returns 200 for streaming
@@ -136,7 +158,7 @@ async def test_chat_completions_upstream_error():
 
 
 @pytest.mark.asyncio
-async def test_chat_completions_network_error():
+async def test_chat_completions_network_error(auth_headers):
     """Test handling of network errors to upstream API."""
     from chatbot.backend.main import app
     
@@ -150,6 +172,7 @@ async def test_chat_completions_network_error():
             response = await client.post(
                 "/api/v1/chat/completions",
                 json={"messages": [{"role": "user", "content": "Hi"}]},
+                headers=auth_headers,
             )
             
             assert response.status_code == 200  # Still returns 200 for streaming
@@ -158,20 +181,25 @@ async def test_chat_completions_network_error():
 
 
 @pytest.mark.asyncio
-async def test_chat_completions_with_api_key():
+async def test_chat_completions_with_api_key(auth_headers):
     """Test that API key is properly forwarded to upstream."""
     from chatbot.backend.main import app
     
     # Mock settings with API key
     import chatbot.core.config as config_module
+    from chatbot.backend import api as api_module
+
     original_settings = config_module.settings
+    original_api_settings = api_module.settings
     
     class MockSettings:
         UPSTREAM_API_BASE = "http://upstream.test"
         UPSTREAM_API_KEY = "sk-test-key-123"
         DEFAULT_MODEL = "gpt-3.5-turbo"
+        AUTH_TOKEN_TTL_HOURS = 24 * 7
     
     config_module.settings = MockSettings()
+    api_module.settings = config_module.settings
     
     try:
         with respx.mock() as respx_mock:
@@ -188,6 +216,7 @@ async def test_chat_completions_with_api_key():
                 response = await client.post(
                     "/api/v1/chat/completions",
                     json={"messages": [{"role": "user", "content": "Hi"}]},
+                    headers=auth_headers,
                 )
                 
                 assert response.status_code == 200
@@ -198,6 +227,7 @@ async def test_chat_completions_with_api_key():
     
     finally:
         config_module.settings = original_settings
+        api_module.settings = original_api_settings
 
 
 @pytest.mark.asyncio

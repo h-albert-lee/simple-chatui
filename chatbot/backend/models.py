@@ -2,7 +2,7 @@
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, constr
 
 
 class ChatMessage(BaseModel):
@@ -20,3 +20,14 @@ class ChatCompletionRequest(BaseModel):
 
 class ErrorResponse(BaseModel):
     error: str
+
+
+class AuthRequest(BaseModel):
+    username: constr(min_length=1)
+    password: constr(min_length=1)
+
+
+class AuthResponse(BaseModel):
+    user_id: str
+    username: str
+    token: str

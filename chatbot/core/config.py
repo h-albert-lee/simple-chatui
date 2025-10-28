@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     # Persistence
     DATABASE_URL: str = "sqlite:///chat_history.db"
 
+    # Authentication
+    AUTH_TOKEN_TTL_HOURS: int = 24 * 7
+
     # CORS
     CORS_ORIGINS: List[str] = ["http://localhost:8501"]
 
