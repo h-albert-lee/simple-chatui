@@ -11,6 +11,7 @@ def render_sidebar() -> None:
     with st.sidebar:
         st.title("💬 Simple ChatUI")
         st.caption("OpenAI-compatible multi-turn chat UI")
+        st.text("Made by Hanwool Albert Lee.")
 
         if st.button("➕ 새 대화", use_container_width=True):
             session_manager.create_new_chat()
