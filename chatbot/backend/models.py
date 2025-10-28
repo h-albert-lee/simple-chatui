@@ -1,7 +1,22 @@
-from pydantic import BaseModel
-from typing import List, Dict
+"""Pydantic models for the backend API."""
 
-class ChatRequest(BaseModel):
-    messages: List[Dict[str, str]]
-    model: str = "default-model" # 필요시 vLLM에서 사용하는 모델 이름으로 변경
+from typing import Literal, Optional
+
+from pydantic import BaseModel, Field
+
+
+class ChatMessage(BaseModel):
+    role: Literal["system", "user", "assistant"]
+    content: str
+
+
+class ChatCompletionRequest(BaseModel):
+    messages: list[ChatMessage]
+    model: Optional[str] = None
     stream: bool = True
+    temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
+    top_p: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+
+
+class ErrorResponse(BaseModel):
+    error: str
