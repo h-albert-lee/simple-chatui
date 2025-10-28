@@ -1,0 +1,9 @@
+INFO:     Started server process [6131]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     127.0.0.1:52712 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49914 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36132 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51142 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48908 - "POST /v1/chat/completions HTTP/1.1" 200 OK

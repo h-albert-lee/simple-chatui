@@ -78,7 +78,7 @@ def render_auth_forms() -> None:
                 st.error("아이디 또는 비밀번호가 올바르지 않습니다.")
             else:
                 st.success("로그인에 성공했습니다!")
-                st.experimental_rerun()
+                st.rerun()
 
     with tab_signup:
         with st.form("signup_form", clear_on_submit=True):
@@ -94,4 +94,4 @@ def render_auth_forms() -> None:
                 st.error(str(exc))
             else:
                 st.success("회원가입 완료! 자동으로 로그인되었습니다.")
-                st.experimental_rerun()
+                st.rerun()
