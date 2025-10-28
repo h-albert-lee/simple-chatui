@@ -59,4 +59,4 @@ if prompt:
             if full_response:
                 session_manager.append_message("assistant", full_response)
 
-    st.experimental_rerun()
+    st.rerun()

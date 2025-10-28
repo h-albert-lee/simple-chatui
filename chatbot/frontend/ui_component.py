@@ -14,7 +14,7 @@ def render_sidebar() -> None:
 
         if st.button("➕ 새 대화", use_container_width=True):
             session_manager.create_new_chat()
-            st.experimental_rerun()
+            st.rerun()
 
         st.markdown("---")
         model_name = st.text_input(
@@ -35,10 +35,10 @@ def render_sidebar() -> None:
             cols = st.columns([0.8, 0.2])
             if cols[0].button(convo["title"], key=f"select_{convo['id']}", use_container_width=True):
                 session_manager.set_current_chat(convo["id"])
-                st.experimental_rerun()
+                st.rerun()
             if cols[1].button("🗑️", key=f"delete_{convo['id']}"):
                 session_manager.delete_conversation(convo["id"])
-                st.experimental_rerun()
+                st.rerun()
 
 
 def render_chat_history(chat: dict[str, object]) -> None:

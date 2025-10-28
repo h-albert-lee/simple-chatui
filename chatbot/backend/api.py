@@ -34,9 +34,7 @@ async def _stream_upstream(payload: Dict[str, object]) -> AsyncGenerator[bytes, 
                 async for chunk in response.aiter_raw():
                     yield chunk
         except httpx.HTTPStatusError as exc:
-            message = (
-                f"Upstream API returned {exc.response.status_code}: {exc.response.text.strip()}"
-            )
+            message = f"Upstream API returned {exc.response.status_code}"
             logger.error(message)
             error_payload = ErrorResponse(error=message).model_dump_json()
             yield f"data: {error_payload}\n\n".encode("utf-8")
