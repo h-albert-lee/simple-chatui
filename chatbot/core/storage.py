@@ -335,3 +335,16 @@ def delete_conversation(user_id: str, conversation_id: str) -> None:
             "DELETE FROM conversations WHERE id = ? AND user_id = ?",
             (conversation_id, user_id),
         )
+
+
+# Helper functions for testing
+def delete_user_by_username(username: str) -> None:
+    """Delete a user by username. Used for testing cleanup."""
+    with _connect() as conn:
+        conn.execute("DELETE FROM users WHERE username = ?", (username,))
+
+
+def delete_conversation_by_id(conversation_id: str) -> None:
+    """Delete a conversation by ID (without user check). Used for testing cleanup."""
+    with _connect() as conn:
+        conn.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
